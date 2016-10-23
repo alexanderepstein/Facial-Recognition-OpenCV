@@ -1,3 +1,4 @@
+
 /*
  * Copyright (c) 2011. Philipp Wagner <bytefish[at]gmx[dot]de>.
  * Released to public domain under terms of the BSD Simplified license.
@@ -16,21 +17,23 @@
  *   See <http://www.opensource.org/licenses/bsd-license>
  */
 /*
- * This source code has been modified by Alex Epstein 
+ * This source code has been modified by Alex Epstein
  * 	 Added features:
- * 		-By utilizing the area of the detected face we can look to recognize only the closest face
+ * 		-By utilizing the area of the detected face we can look to recognize only the closest face when mutiple faces are present
  * 		-An array that can store the names of the users so the output will predict it is jack rather than label 4
- * 		-Utilzing all methods of facial recognition we can determine if the prediction is accurate before proceeding 
+ * 		-Utilzing all methods of facial recognition we can determine if the prediction is accurate before proceeding
  * 		-By using the LBPH facial recognition method I implemented adaptive training of the model based on confidence of prediction
  * 		-Detection and recognition all occur in one file to optimze the process rather than having to run one script after another through php
- *		-The output of the recognition is stored in a text file with the time along with other information about whether the model has been updated or not for use in further application
+ *		-The output of the recognition is stored in a text file with the time along with other information about whether the model has been updated or not for use in further application all of this same information can be sent to the console as well
  */
- 
+
 #include "opencv2/objdetect/objdetect.hpp"
 #include "opencv2/core.hpp"
 #include "opencv2/face.hpp"
 #include "opencv2/highgui.hpp"
 #include "opencv2/imgproc.hpp"
+#include <boost/filesystem/operations.hpp>
+#include <boost/filesystem/path.hpp>
 #include <iostream>
 #include <ctime>
 #include <fstream>
@@ -47,38 +50,40 @@ void recognize();
 
 //Global Variables
   bool speedTest = false;
-  string listOfPeople[11] = {"no", //Person 0
-					"ddf", //Person 1
-					"fd", //Person 2
-					"fdd", //Person 3
-					"Ellen Degeneres", //Person 4
-					"dfds" , //Person 5
-					"person", //Person 6
-					"pep", //Person 7
-					"pp" , //Person 8
-					"fd", //Person 9
-					 "hello" //Person 10
+  string listOfPeople[11] = {"UKN", //Person 0
+					"UKN", //Person 1
+					"UKN", //Person 2
+					"UKN", //Person 3
+					"ED", //Person 4
+					"UKN" , //Person 5
+					"UKN", //Person 6
+					"UKN", //Person 7
+					"UKN" , //Person 8
+					"UKN", //Person 9
+					"UKN" //Person 10
 				};
-	string face_cascade_name = "/home/epsteina/Desktop/Data/facetrack-training.xml";
+  string sourcepath = "/home/epsteina/Desktop/Data/"
+	string face_cascade_name = sourcepath + "facetrack-training.xml";
 	CascadeClassifier face_cascade;
 	int predictedLabel = -1;
 	double confidence = 0.0;
 	int tryrec = 0;
 	int found = -1;
 	clock_t begin;
-    clock_t dstart;
-    clock_t dend;
-    clock_t start;
-    clock_t end;
-    clock_t g;
-    clock_t h;
-	clock_t s;
-	clock_t j;
-	clock_t n;
+  clock_t end;
+  clock_t FacialDetectStart;
+  clock_t FacialDetectEnd;
+  clock_t TotalRecStart;
+  clock_t TotalRecEnd;
+  clock_t LBPHstart;
+  clock_t LBPHend;
+	clock_t FisherStart;
+	clock_t FisherEnd;
+
 	double fishersecs;
 	double secs;
 	double LBPHsecs;
-				
+
 
 static void read_csv(const string& filename, vector<Mat>& images, vector<int>& labels, char separator = ';') {
     std::ifstream file(filename.c_str(), ifstream::in);
@@ -97,17 +102,19 @@ static void read_csv(const string& filename, vector<Mat>& images, vector<int>& l
         }
     }
 }
+
+
 int main(int argc, const char *argv[]) {
 if (speedTest){
     begin = clock();
-    dstart = clock();
+    FacialDetectStart = clock();
 }
 while (tryrec <= 3 && found ==-1){
-    // This would be the code used to grab the image 
+    // This would be the code used to grab the image
     //* Get a handle to the Video device:
-    
+
     VideoCapture cap(0);
-    
+
     // Check if we can use this device at all:
     if(!cap.isOpened()) {
         cerr << "Capture Device ID cannot be opened." << endl;
@@ -115,9 +122,9 @@ while (tryrec <= 3 && found ==-1){
     }
     // Holds the current frame from the Video device:
     Mat frame;
-    
+
         cap >> frame;
-	
+
 	 cap.release();
 	 //Attempt to load in the facial cascade that is used in detecting faces
 	if (!face_cascade.load(face_cascade_name)){
@@ -126,39 +133,43 @@ while (tryrec <= 3 && found ==-1){
     }
     // Read the image file of ellen degeneres
    // Mat frame = imread("/home/epsteina/Desktop/ellen.jpg");
-    
-	 
+
+
 	detect(frame);
 }
 	if (speedTest)
 	{
-	dend = clock();
-	
-	double delapsed_secs = double(dend - dstart) / CLOCKS_PER_SEC; 
+	FacialDetectEnd = clock();
+	double delapsed_secs = double(FacialDetectEnd - FacialDetectStart) / CLOCKS_PER_SEC;
+  delete FacialDetectEnd;
+  delete FacialDetectStart;
     }
 	//cout << "The detection took " << delapsed_secs << " seconds." << endl;
 	recognize();
 	if (speedTest)
 	{
-    end = clock();
-	
-	double elapsed_secs = double(end - begin) / CLOCKS_PER_SEC;
+  end = clock();
+
+  outfile << "The detection and recognition took " << double(end - begin) << " seconds."<<endl;
     }
 	//Use this output to determine if any changes made in the code are actually optimizng the process
-	//outfile << "The detection and recognition took " << elapsed_secs << " seconds."<<endl;
-	
+	//
+
 	/*
 	 * To count elapsed time use this code
 	 * clock_t begin = clock(); //this line will begin the clock
-	 * 
+	 *
 	 * (Code you want to time goes here)
-	 * 
+	 *
 	 * clock_t end = clock(); //this line will end the clock
 	 * double elapsed_secs = double(end - begin) / CLOCKS_PER_SEC; //this will set elapsed_secs to amount of passed seconds
 	 * */
-   
+
     return 0;
 }
+
+
+
 void recognize()
 {
 	if (speedTest)
@@ -166,7 +177,7 @@ void recognize()
 	 start = clock();
     }
     // Get the path to your CSV.
-    string fn_csv = string("/home/epsteina/Desktop/Data/Faces.txt");
+    string fn_csv = sourcepath + "Faces.txt"
     // These vectors hold the images and corresponding labels.
     vector<Mat> images;
     vector<int> labels;
@@ -193,12 +204,12 @@ void recognize()
     // done, so that the training data (which we learn the
     // cv::BasicFaceRecognizer on) and the test data we test
     // the model with, do not overlap.
-    Mat testSample = imread("/home/epsteina/Desktop/Data/tempface.png", CV_LOAD_IMAGE_GRAYSCALE);
+    Mat testSample = imread(sourcepath + "tempface.png", CV_LOAD_IMAGE_GRAYSCALE);
     images.pop_back();
     labels.pop_back();
-    
-	
-					
+
+
+
    // The following lines create an LBPH model for
     // face recognition and train it with the images and
     // labels read from the given CSV file.
@@ -219,39 +230,46 @@ void recognize()
     //
     // And if you want a threshold (e.g. 123.0) call it with its default values:
     //
-    // 
+    //
     if (speedTest)
 	{
-		g = clock();
+		LBPHstart = clock();
 	}
     Ptr<LBPHFaceRecognizer> model = createLBPHFaceRecognizer(1,8,8,8,650);
-    //model->train(images, labels);
-    //model->save("/home/epsteina/Desktop/Data/LBPHFaceRec.xml");
-    model->load("/home/epsteina/Desktop/Data/LBPHFaceRec.xml");
+
+
+    try {
+      model->load(sourcepath + "LBPHFaceRec.xml");
+     }
+    catch (...) {
+      model->train(images, labels);
+      model->save(sourcepath + "LBPHFaceRec.xml");
+    }
+
     model->predict(testSample, predictedLabel, confidence);
     string personsname = listOfPeople[predictedLabel]; //replace label with a name
 	if (speedTest)
 	{
-		h = clock(); //this line will end the clock
-	
-	LBPHsecs = double(h - g) / CLOCKS_PER_SEC;
+		LBPHend = clock(); //this line will end the clock
+	  LBPHsecs = double(LBPHend - LBPHstart) / CLOCKS_PER_SEC;
+    delete LBPHend;
 }
-	
+
     //
     //Get the current time and translate it to coordinated universal time
-     
+
      // current date/time based on current system
 	time_t now = time(0);
-   
+
    // convert now to string form
 	char* dt = ctime(&now);
-    
+
     // convert now to tm struct for UTC
    tm *gmtm = gmtime(&now);
    dt = asctime(gmtm);
    if (speedTest)
 	{
-    s = clock();
+    FisherStart = clock();
 	}
     Ptr<FaceRecognizer> Fishermodel = createFisherFaceRecognizer(0,20000.0);
     Fishermodel->train(images, labels);
@@ -259,11 +277,13 @@ void recognize()
 	string Fisherperson = listOfPeople[predicted];
    	if (speedTest)
 	{
-   	j = clock(); //this line will end the clock
-	fishersecs = double(j - s) / CLOCKS_PER_SEC;
-    }  
-	
-    
+  FisherEnd = clock(); //this line will end the clock
+	fishersecs = double(FisherEnd - FisherStart) / CLOCKS_PER_SEC;
+  delete FisherStart;
+  delete FisherEnd;
+    }
+
+
     /*
     clock_t q = clock();
     Ptr<FaceRecognizer> EigenModel =  createEigenFaceRecognizer(10,20000.0);
@@ -273,7 +293,7 @@ void recognize()
     clock_t m = clock(); //this line will end the clock
 	double Eigensecs = double(m - q) / CLOCKS_PER_SEC;
     */
-	
+
     //
     // To get the confidence of a prediction call the model with:
     //
@@ -289,29 +309,29 @@ void recognize()
     cout << endl;
     cout << endl;
    //
-   
+
 	ofstream outfile;
-	outfile.open("/home/epsteina/Desktop/Data/Recognition.txt", ios::out | ios::trunc );
+	outfile.open(sourcepath + "Recognition.txt", ios::out | ios::trunc );
    //
    outfile << "Confidence level of reading is " << confidence <<endl;
    //if ((predictedLabel == predicted) || (predictedLabel == predictedcheck)){
-   if (predictedLabel == predicted){
+   if (predictedLabel == predicted && Fisherperson != "UKN"){
 	 if (confidence >= 70.0)
     {
-		vector<Mat> upd; 
+		vector<Mat> upd;
 		vector<int> src;
-		upd.push_back(imread("/home/epsteina/Desktop/Data/tempface.png", 0));
+		upd.push_back(imread(sourcepath + "tempface.png", 0));
 		src.push_back(predictedLabel);
 		model->update(upd,src);
-		model->save("/home/epsteina/Desktop/Data/LBPHFaceRec.xml");
+		model->save(sourcepath + "LBPHFaceRec.xml");
 		cout << personsname << endl;
 		outfile << "Predicted name: " << personsname << " with a confidence of: " << confidence << endl;
 		outfile << endl;
 		outfile << dt << endl;
 		outfile<< endl;
 		outfile << "Facial recognition model has been updated for " << personsname <<endl;
-		
-	} 
+
+	}
 	else if (confidence >=55 || confidence == 0)
 	{
 		if (confidence != 0){
@@ -322,6 +342,7 @@ void recognize()
 		{
 		cout << personsname << endl;
 		outfile<< "Predicted name: " << personsname << endl ;
+    outfile<< "This prediction is of low confidence and shouldnt be used for certain implementations"
 		}
 		outfile << endl;
 		outfile << dt << endl;
@@ -346,17 +367,17 @@ else
 
 	if (speedTest)
 	{
-	n = clock(); //this line will end the clock
-	secs = double(n - start) / CLOCKS_PER_SEC;
+	TotalRecEnd = clock(); //this line will end the clock
+
 	outfile << endl;
 	outfile << endl;
-	
+
 	outfile << "The LBPH Face recognition took " << LBPHsecs << " seconds."<<endl;
 	outfile << "The Fisher Face recognition took " << fishersecs << " seconds."<<endl;
 	//cout << "The Eigen Face recognition took " << Eigensecs << " seconds."<<endl;
 	outfile<< endl;
 	outfile << endl;
-	outfile << "The total facial recognition took " << secs << " seconds."<<endl;
+	outfile << "The total facial recognition took " << double(TotalRecEnd - TotalRecStart) << " seconds."<<endl;
 	}
 	outfile<< endl;
 	outfile<< endl;
@@ -390,7 +411,7 @@ void detect(Mat frame)
 
     size_t ib = 0; // ib is index of biggest element
     int ab = 0; // ab is area of biggest element
-	
+
 if (faces.size() > 1){
     found = 1;
     for (ic = 0; ic < faces.size(); ic++) // Iterate through all current elements (detected faces)
@@ -411,7 +432,7 @@ if (faces.size() > 1){
         ab = roi_b.width * roi_b.height; // Get the area of biggest element, at beginning it is same as "current" element
 
 		//the next few lines attempt to extract the face that is closest to the camera
-        if (ac > ab)     
+        if (ac > ab)
         {
             ib = ic;
             roi_b.x = faces[ib].x;
@@ -444,8 +465,9 @@ else if (faces.size()==1){
 else
 {
 	tryrec = tryrec + 1;
+  	clock_t delay_start = clock();
+  	clock_t delay_end = 2 * 1000 + delay_start
+	while(clock() != delay_end);
 }
 
-       
-        
 }
